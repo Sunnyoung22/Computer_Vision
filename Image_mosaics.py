@@ -4,6 +4,12 @@
 import cv2
 import numpy as np
 
+# 计算亮度
+def get_brightness(frame):
+    hsv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    brightness = np.median(hsv_image[:,:,2])
+    return brightness
+
 # 递归裁剪函数，将拼接后图片多余的黑边除去
 def crop(frame):
     if not np.sum(frame[0]):#顶部一行
@@ -22,14 +28,14 @@ picr_name = ".\\data\\Boat_b.jpg"
 # 读取需要进行拼接的两幅图片，进行预处理（尺寸与灰度的变换）
 origin_img_l = cv2.imread(picl_name)
 img_left = cv2.resize(origin_img_l, (0,0), fx=0.2, fy=0.2)
-img_left_gray = cv2.cvtColor(img_left, cv2.COLOR_RGB2GRAY)
+img_left_gray = cv2.cvtColor(img_left, cv2.COLOR_BGR2GRAY)
 
 origin_img_r = cv2.imread(picr_name)
 img_right = cv2.resize(origin_img_r, (0,0), fx=0.2, fy=0.2)
-img_right_gray = cv2.cvtColor(img_right, cv2.COLOR_RGB2GRAY)
-
+img_right_gray = cv2.cvtColor(img_right, cv2.COLOR_BGR2GRAY)
 # print(origin_img_l.shape)
-print(img_left.shape)
+# print(img_left.shape)
+
 cv2.imshow("Boat_left", img_left)
 cv2.imshow("Boat_right", img_right)
 cv2.waitKey(2000)
@@ -59,10 +65,11 @@ for m,n in matches:
     if m.distance < 0.6*n.distance:
         good_points.append(m)
 
-# imageA和imageB表示图片，kpsA和kpsB表示关键点， matches表示进过cv2.BFMatcher获得的匹配的索引值，也有距离， flags表示有几个图像
+# imageA和imageB表示图片，kpsA和kpsB表示关键点，matches表示经过cv2.BFMatcher获得的匹配的索引值，flags表示有几个图像
 img3 = cv2.drawMatches(img_left, kp_a, img_right, kp_b, good_points, None, flags = 2)
 cv2.imshow("Feature point matching",img3)
 cv2.waitKey(3000)
+cv2.destroyAllWindows()
 
 MIN_MATCH_COUNT = 10
 if len(good_points) > MIN_MATCH_COUNT:
@@ -72,17 +79,20 @@ if len(good_points) > MIN_MATCH_COUNT:
     # 正确的可以称为内点，错误的称为外点，RANSAC方法就是从这些包含错误匹配的数据中，分离出正确的匹配，并且求得单应矩阵。
     M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 else:
-    print("Not enought matches are found - %d/%d", (len(good_points)/MIN_MATCH_COUNT))
+    print("Not enough matches are found - %d/%d", (len(good_points)/MIN_MATCH_COUNT))
 # 获得根据单应性矩阵变化后的图像
-result = cv2.warpPerspective(img_right,M,(img_right.shape[1] + img_left.shape[1], img_left.shape[0]))
-cv2.imshow("original_image_stitched.jpg", result)
-cv2.waitKey(2000)
-# 将左侧图片与变换后的右侧图片连接
-result[0:img_left.shape[0],0:img_left.shape[1]] = img_left
-cv2.imshow("original_image_stitched.jpg", result)
+transformed_image = cv2.warpPerspective(img_right,M,(img_right.shape[1] + img_left.shape[1], img_left.shape[0]))
+cv2.imshow("Transformed image", transformed_image)
 cv2.waitKey(2000)
 cv2.destroyAllWindows()
 
-cv2.imshow("original_image_stitched_crop.jpg", crop(result))
+# 将左侧图片与变换后的右侧图片连接
+transformed_image[0:img_left.shape[0],0:img_left.shape[1]] = img_left
+cv2.imshow("Image stitching", transformed_image)
+cv2.waitKey(2000)
+cv2.destroyAllWindows()
+
+result=crop(transformed_image)
+cv2.imshow("The final result of image stitching", result)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
