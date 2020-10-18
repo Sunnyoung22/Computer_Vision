@@ -94,6 +94,7 @@ if len(good_points) > MIN_MATCH_COUNT:
 
     result=crop(transformed_image)
     cv2.imshow("The final result of image stitching", result)
+    cv2.imwrite(".\\result\\Result.jpg",result)
     cv2.waitKey(0)
 else:   # 匹配点数不足，不进行拼接
     print("Not enough matches are found - %d/%d", (len(good_points)/MIN_MATCH_COUNT))
