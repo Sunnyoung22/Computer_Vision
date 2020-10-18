@@ -19,7 +19,7 @@ def crop(frame):
     if not np.sum(frame[:,0]):#左边界
         return crop(frame[:,1])
     if not np.sum(frame[:,-1]):#右边界
-        return crop(frame[:,:-15])
+        return crop(frame[:,:-17])
     return frame
 
 picl_name = ".\\data\\Boat_a.jpg"
@@ -57,12 +57,13 @@ matches = match.knnMatch(des_a, des_b, k=2)
 
 # 取一幅图像中的一个SIFT关键点，并找出其与另一幅图像中欧式距离最近的前两个关键点，在这两个关键点中，
 # 如果最近的距离除以次近的距离得到的比率ratio少于某个阈值T，则接受这一对匹配点。
-# d1:最近邻，d2:次近邻。即d1<k*d2。
-# 我们知道距离越近匹配度越高，但是，当所有点的距离都比较近时，匹配的可靠性不高。反之，如果只有点一个距离比较近，
-# 其它点距离都相对较远时，该点匹配的可靠度增加。d1<k*d2就是为了说明这一点。
+# d1:最近邻，d2:次近邻。d1<distRatio*d2。
+# 距离越近匹配度越高，但是，当所有点的距离都比较近时，匹配的可靠性不高。反之，如果只有点一个距离比较近，
+# 其它点距离都相对较远时，该点匹配的可靠度增加。d1<distRatio*d2就是为了说明这一点。
+distRatio = 0.65
 good_points = []
 for m,n in matches:
-    if m.distance < 0.6*n.distance:
+    if m.distance < distRatio*n.distance:
         good_points.append(m)
 
 # imageA和imageB表示图片，kpsA和kpsB表示关键点，matches表示经过cv2.BFMatcher获得的匹配的索引值，flags表示有几个图像
@@ -71,28 +72,28 @@ cv2.imshow("Feature point matching",img3)
 cv2.waitKey(3000)
 cv2.destroyAllWindows()
 
-MIN_MATCH_COUNT = 10
+MIN_MATCH_COUNT = 10    # 最小匹配对数
 if len(good_points) > MIN_MATCH_COUNT:
     dst_pts = np.float32([kp_a[m.queryIdx].pt for m in good_points])
     src_pts = np.float32([kp_b[m.trainIdx].pt for m in good_points])
-    # 在这个函数参数中，输入的m1和m2是两个对应的序列，这两组序列的每一对数据一一匹配，其中既有正确的匹配，也有错误的匹配，
+    # 在这个函数参数中，输入的是两个对应的序列，这两组序列的每一对数据一一匹配，其中既有正确的匹配，也有错误的匹配，
     # 正确的可以称为内点，错误的称为外点，RANSAC方法就是从这些包含错误匹配的数据中，分离出正确的匹配，并且求得单应矩阵。
     M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-else:
+
+    # 获得根据单应性矩阵变化后的图像
+    transformed_image = cv2.warpPerspective(img_right,M,(img_right.shape[1] + img_left.shape[1], img_left.shape[0]))
+    cv2.imshow("Transformed image", transformed_image)
+    cv2.waitKey(2000)
+    cv2.destroyAllWindows()
+
+    # 将左侧图片与变换后的右侧图片连接
+    transformed_image[0:img_left.shape[0],0:img_left.shape[1]] = img_left
+    cv2.imshow("Image stitching", transformed_image)
+    cv2.waitKey(2000)
+    cv2.destroyAllWindows()
+
+    result=crop(transformed_image)
+    cv2.imshow("The final result of image stitching", result)
+    cv2.waitKey(0)
+else:   # 匹配点数不足，不进行拼接
     print("Not enough matches are found - %d/%d", (len(good_points)/MIN_MATCH_COUNT))
-# 获得根据单应性矩阵变化后的图像
-transformed_image = cv2.warpPerspective(img_right,M,(img_right.shape[1] + img_left.shape[1], img_left.shape[0]))
-cv2.imshow("Transformed image", transformed_image)
-cv2.waitKey(2000)
-cv2.destroyAllWindows()
-
-# 将左侧图片与变换后的右侧图片连接
-transformed_image[0:img_left.shape[0],0:img_left.shape[1]] = img_left
-cv2.imshow("Image stitching", transformed_image)
-cv2.waitKey(2000)
-cv2.destroyAllWindows()
-
-result=crop(transformed_image)
-cv2.imshow("The final result of image stitching", result)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
