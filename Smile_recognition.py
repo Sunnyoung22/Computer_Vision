@@ -3,8 +3,9 @@
 import numpy as np
 import cv2
 
+IMAGE_SIZE = (60,60)    # 将读入图片尺寸固定为60*60
+
 def image2vector(image):
-    IMAGE_SIZE = (60,60)
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     image_gray = cv2.resize(image_gray,IMAGE_SIZE,interpolation=cv2.INTER_CUBIC)
     high, width = image_gray.shape
@@ -25,43 +26,42 @@ def get_image_matrix(path, total_num):
 # 零均值化
 def zero_mean(data_matrix):
     mean_val = np.mean(data_matrix, axis=0) # 按列求均值
-    result_matrix = data_matrix - mean_val
+    result_matrix = data_matrix - mean_val  # 零均值化
     return result_matrix, mean_val
 
 def pca(data_matrix, k):
     matrix_zero_mean, mean_val = zero_mean(data_matrix)
     matrix_zero_mean = np.mat(matrix_zero_mean)# 创建矩阵类型的数据
     
-    """计算协方差矩阵C的替代L"""
-    cov_mat = matrix_zero_mean * matrix_zero_mean.T     # 采用SVD奇异特征值法可以减小计算量
-    egvalue, egvector_ = np.linalg.eig(cov_mat) # 特征向量V[:,i]对应特征值D[i]
-
+    """计算协方差矩阵"""
+    cov_mat = matrix_zero_mean * matrix_zero_mean.T
+    # cov_mat = np.cov(matrix_zero_mean, rowvar=1)
+    egvalue, egvector_ = np.linalg.eig(cov_mat)
     egval_ascending = np.argsort(egvalue)       # 对特征值从小到大排序
     index = egval_ascending[-1:-(k+1):-1]       # 最大的k个特征值的下标
     egvector = egvector_[:,index]               # 最大的k个特征值对应的特征向量
 
-    egvector = matrix_zero_mean.T * egvector    # 得到协方差矩阵(covMatT')的特征向量
+    egvector = matrix_zero_mean.T * egvector    # 得到协方差矩阵(cov_mat)的特征向量
     for i in range(k):                          # 特征向量归一化
         egvector[:,i] /= np.linalg.norm(egvector[:,i])
-
-    #low_D_data_mat = np.array(Z*V1)，这是降维后的数据，不应该叫特征脸！！！！！！
+    
+    #降维后的数据矩阵
     low_D_data_mat = np.array(matrix_zero_mean * egvector)
     return low_D_data_mat, mean_val, egvector
     
-def smiling_face_judgment(test_image, eigenface, mean_val, egvector):
-    train_total_number = eigenface.shape[0]
+def smiling_face_judgment(test_image, pca_mat, mean_val, egvector):
+    train_total_number = pca_mat.shape[0]
     image_vector = image2vector(test_image)
     test_image_zero_mean = image_vector - mean_val
-    eigenface_new = np.array(test_image_zero_mean * egvector) # 得到测试脸在特征向量下的数据
+    pca_mat_new = np.array(test_image_zero_mean * egvector) # 得到测试脸在特征向量下的数据
 
     distance = []
     for i in range(0, train_total_number):
-        temp = eigenface[i,:]
-        dis = np.linalg.norm(eigenface_new - temp) #计算范数
+        temp = pca_mat[i,:]
+        dis = np.linalg.norm(pca_mat_new - temp) # 计算欧几里得范数
         distance.append(dis)
-    
-    minDistance = min(distance)
-    index = distance.index(minDistance)
+    minDistance = min(distance) # 取得最小距离
+    index = distance.index(minDistance) # 取得最小距离图片的下标
     if index + 1 <= 14:
         return True
     else:
@@ -74,26 +74,30 @@ if __name__ =='__main__':
     TRAIN_TOTAL_NUMBER = 28   # 训练图片数量28张
     TEST_TOTAL_NUMBER = 14    # 测试图片数量14张
     image_matrix = get_image_matrix(TRAIN_FOLDER, TRAIN_TOTAL_NUMBER)
-    eigenface, mean_val, egvector = pca(image_matrix, 20)   # 得到eigenface
+    pca_mat, mean_val, egvector = pca(image_matrix, 20)   # 得到降维矩阵，均值与eigenface
 
     correct_num = 0
     for i in range(1, TEST_TOTAL_NUMBER+1):
         test_image = cv2.imread(TEST_FOLDER + str(i) +".png")
-        if i <= 7 and smiling_face_judgment(test_image, eigenface, mean_val, egvector): 
+        if i <= 7 and smiling_face_judgment(test_image, pca_mat, mean_val, egvector): 
             correct_num += 1
-        if i > 7 and smiling_face_judgment(test_image, eigenface, mean_val, egvector) == False: 
+        if i > 7 and smiling_face_judgment(test_image, pca_mat, mean_val, egvector) == False: 
             correct_num += 1
         accuracy = float(correct_num)/TEST_TOTAL_NUMBER
     print("The recognition accuracy is: %.2f%%" %(accuracy * 100))
 
-    test_num = input("Please enter picture number(1~14)：")
+    print("-----------------------------------------")
+    test_num = input("| Please enter a picture number(1~14)：")
     test_image = cv2.imread(TEST_FOLDER + test_num +".png")
-    result = smiling_face_judgment(test_image, eigenface, mean_val, egvector)
+    result = smiling_face_judgment(test_image, pca_mat, mean_val, egvector)
     if result:
-        print("This picture is a smiley face")
+        print("\n| This picture is a smiley face.")
+        print("-----------------------------------------")
     else:
-        print("This picture is not a smiley face")
-    cv2.imshow("Test Picture",test_image)
+        print("\n| This picture is not a smiley face.")
+        print("-----------------------------------------")
+    cv2.namedWindow("Test picture", 0)
+    cv2.resizeWindow("Test picture", 180, 180)
+    cv2.imshow("Test picture",test_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-
